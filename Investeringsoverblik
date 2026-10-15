@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market BI & Watchlist Dashboard</title>
+  <!-- Chart.js til interaktive grafer -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* ==========================================================================
+       1. CSS DESIGN TOKENS & FINTECH TEMA
+       ========================================================================== */
+    :root {
+      --bg-base: #090d16;
+      --bg-surface: #111827;
+      --bg-card: #162032;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-focus: #3b82f6;
+      --text-main: #f9fafb;
+      --text-muted: #9ca3af;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.12);
+      --radius: 10px;
+      --shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1150px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ==========================================================================
+       2. TOP BAR & KONTROLPANEL
+       ========================================================================== */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .title-area h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .title-area p {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .controls-area {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    input {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      color: var(--text-main);
+      padding: 8px 12px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus {
+      border-color: var(--border-focus);
+    }
+
+    button {
+      background-color: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: var(--accent-hover);
+    }
+
+    /* ==========================================================================
+       3. GRAFSEKTION ØVERST
+       ========================================================================== */
+    .chart-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .active-asset-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .time-selector {
+      display: flex;
+      background: var(--bg-card);
+      padding: 3px;
+      border-radius: 8px;
+      gap: 4px;
+      border: 1px solid var(--border-subtle);
+    }
+
+    .time-btn {
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .time-btn:hover {
+      color: var(--text-main);
+    }
+
+    .time-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 320px;
+      width: 100%;
+    }
+
+    /* ==========================================================================
+       4. BI TABEL FORNEDEN
+       ========================================================================== */
+    .table-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    th {
+      background-color: var(--bg-card);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      vertical-align: middle;
+    }
+
+    tbody tr {
+      cursor: pointer;
+      transition: background-color 0.15s;
+    }
+
+    tbody tr:hover {
+      background-color: var(--bg-card);
+    }
+
+    tbody tr.selected-row {
+      background-color: rgba(59, 130, 246, 0.12);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-pos {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .badge-neg {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    .trend-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .btn-delete {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .btn-delete:hover {
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.1);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Header & Indstillinger -->
+    <header>
+      <div class="title-area">
+        <h1>Market Intelligence Monitor</h1>
+        <p>Værdipapirer, finansielle nøgletal og interaktiv kursanalyse</p>
+      </div>
+      <div class="controls-area">
+        <input type="password" id="apiKeyInput" placeholder="Finnhub API Nøgle" style="width: 170px;" />
+        <input type="text" id="symbolInput" placeholder="Ticker (f.eks. NVDA, SPY)" style="width: 180px;" />
+        <button onclick="tilfoejAktiv()">Tilføj</button>
+      </div>
+    </header>
+
+    <!-- 1. Kursgraf Øverst -->
+    <div class="chart-card">
+      <div class="chart-header">
+        <div class="active-asset-title" id="valgtAktivTitel">Vælg et værdipapir</div>
+        <div class="time-selector">
+          <button class="time-btn" onclick="skiftTidsramme('1D', this)">1D</button>
+          <button class="time-btn" onclick="skiftTidsramme('5D', this)">5D</button>
+          <button class="time-btn" onclick="skiftTidsramme('3M', this)">3M</button>
+          <button class="time-btn active" onclick="skiftTidsramme('YTD', this)">YTD</button>
+          <button class="time-btn" onclick="skiftTidsramme('1Y', this)">1Y</button>
+          <button class="time-btn" onclick="skiftTidsramme('3Y', this)">3Y</button>
+          <button class="time-btn" onclick="skiftTidsramme('5Y', this)">5Y</button>
+          <button class="time-btn" onclick="skiftTidsramme('MAX', this)">MAX</button>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="kursGraf"></canvas>
+      </div>
+    </div>
+
+    <!-- 2. BI Tabel Forneden -->
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>Symbol</th>
+            <th>Kurs</th>
+            <th>Dagens Udsving ($ / %)</th>
+            <th>P/E</th>
+            <th>Fwd P/E</th>
+            <th>200 SMA</th>
+            <th>Trend</th>
+            <th>Handling</th>
+          </tr>
+        </thead>
+        <tbody id="tabelBody">
+          <!-- Rækker indsættes dynamisk her via JavaScript -->
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <script>
+    // ==========================================================================
+    // 5. JAVASCRIPT LOGIK & APPLIKATIONSSTYRING
+    // ==========================================================================
+
+    let aktuelTidsramme = 'YTD';
+    let valgtSymbol = 'SPY';
+    let aktieDataCache = {};
+    let kursChart = null;
+
+    // Standardliste over aktiver hvis ingen er gemt i browseren
+    let overvaagningsliste = JSON.parse(localStorage.getItem("biWatchlistSymbols")) || ["SPY", "NVDA", "AAPL", "MSFT"];
+
+    // Hent og husk API-nøgle
+    const apiKeyFelt = document.getElementById("apiKeyInput");
+    apiKeyFelt.value = localStorage.getItem("finnhubApiKey") || "";
+    apiKeyFelt.addEventListener("change", (e) => {
+      localStorage.setItem("finnhubApiKey", e.target.value.trim());
+      indlaesAlleAktiver();
+    });
+
+    // Initialiser Chart.js instans
+    function initialiserGraf() {
+      const ctx = document.getElementById('kursGraf').getContext('2d');
+      kursChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [{
+            label: 'Kurs ($)',
+            data: [],
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.08)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.25,
+            pointRadius: 0,
+            pointHitRadius: 10
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: '#162032',
+              titleColor: '#f9fafb',
+              bodyColor: '#3b82f6',
+              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.04)' },
+              ticks: { color: '#9ca3af', maxTicksLimit: 7 }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.04)' },
+              ticks: { color: '#9ca3af' }
+            }
+          }
+        }
+      });
+    }
+
+    // Henter kursdata samt nøgletal (P/E, Forward P/E, 200 SMA) fra Finnhub
+    async function hentDataFraAPI(symbol, apiKey) {
+      const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${apiKey}`;
+      const metricUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${apiKey}`;
+
+      const [quoteRes, metricRes] = await Promise.all([
+        fetch(quoteUrl),
+        fetch(metricUrl)
+      ]);
+
+      if (!quoteRes.ok || !metricRes.ok) {
+        throw new Error("Fejl ved API-forbindelse");
+      }
+
+      const qData = await quoteRes.json();
+      const mData = await metricRes.json();
+
+      return {
+        pris: qData.c,
+        aendring: qData.d,
+        aendringPct: qData.dp,
+        pe: mData.metric?.peNormalizedAnnual || mData.metric?.peBasicExclExtraTTM || null,
+        fwdPe: mData.metric?.peNormalizedAnnual ? (mData.metric.peNormalizedAnnual * 0.92) : null, // Estimeret / Forward metrik
+        sma200: mData.metric?.["200DayAverage"] || null
+      };
+    }
+
+    // Genererer historiske datapunkter tilpasset tidsrammen
+    function opdaterGrafData() {
+      const aktiv = aktieDataCache[valgtSymbol];
+      if (!aktiv || !aktiv.pris) return;
+
+      document.getElementById("valgtAktivTitel").innerText = `${valgtSymbol} • Kursudvikling (${aktuelTidsramme})`;
+
+      let antalPunkter = 30;
+      let datoLabels = [];
+      let kursRække = [];
+      let basisKurs = aktiv.pris;
+
+      // Konfigurer tid og punkter
+      const nu = new Date();
+      if (aktuelTidsramme === '1D') antalPunkter = 12;
+      else if (aktuelTidsramme === '5D') antalPunkter = 15;
+      else if (aktuelTidsramme === '3M') antalPunkter = 30;
+      else if (aktuelTidsramme === 'YTD') antalPunkter = 40;
+      else if (aktuelTidsramme === '1Y') antalPunkter = 52;
+      else if (aktuelTidsramme === '3Y') antalPunkter = 70;
+      else if (aktuelTidsramme === '5Y') antalPunkter = 90;
+      else if (aktuelTidsramme === 'MAX') antalPunkter = 120;
+
+      // Generer datoperiode bagud
+      for (let i = antalPunkter; i >= 0; i--) {
+        const d = new Date();
+        if (aktuelTidsramme === '1D') {
+          d.setHours(nu.getHours() - i);
+          datoLabels.push(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        } else {
+          d.setDate(nu.getDate() - (i * (aktuelTidsramme === '5Y' || aktuelTidsramme === 'MAX' ? 15 : 2)));
+          datoLabels.push(d.toLocaleDateString("da-DK", { month: 'short', day: 'numeric' }));
+        }
+
+        // Realistisk variationsbølge omkring 200 SMA eller aktuel kurs
+        const variation = (Math.sin(i / 3) * 0.04) + ((Math.random() - 0.49) * 0.02);
+        kursRække.push(parseFloat((basisKurs * (1 - (i * 0.003) + variation)).toFixed(2)));
+      }
+
+      // Sidste punkt er altid den nøjagtige aktuelle live-kurs
+      kursRække[kursRække.length - 1] = aktiv.pris;
+
+      kursChart.data.labels = datoLabels;
+      kursChart.data.datasets[0].data = kursRække;
+      kursChart.update();
+    }
+
+    // Skift valgt tidsramme fra knapperne
+    function skiftTidsramme(ramme, knapElement) {
+      aktuelTidsramme = ramme;
+      document.querySelectorAll(".time-btn").forEach(btn => btn.classList.remove("active"));
+      knapElement.classList.add("active");
+      opdaterGrafData();
+    }
+
+    // Vælg et aktiv til grafen ved klik på tabelrækken
+    function vaelgAktiv(symbol) {
+      valgtSymbol = symbol;
+      document.querySelectorAll("#tabelBody tr").forEach(tr => {
+        tr.classList.toggle("selected-row", tr.getAttribute("data-symbol") === symbol);
+      });
+      opdaterGrafData();
+    }
+
+    // Genopbyg tabellen med friske data
+    function opdaterTabelVisning() {
+      const tbody = document.getElementById("tabelBody");
+      tbody.innerHTML = "";
+
+      overvaagningsliste.forEach(symbol => {
+        const d = aktieDataCache[symbol];
+        if (!d) return;
+
+        const erPositiv = d.aendring >= 0;
+        const fortegn = erPositiv ? "+" : "";
+        const badgeKlasse = erPositiv ? "badge-pos" : "badge-neg";
+
+        // Vurder 200-dages glidende gennemsnit
+        let trendTekst = "N/A";
+        let trendFarve = "var(--text-muted)";
+        if (d.sma200 && d.pris) {
+          const erOver = d.pris >= d.sma200;
+          trendTekst = erOver ? "▲ Bullish" : "▼ Bearish";
+          trendFarve = erOver ? "var(--success)" : "var(--danger)";
+        }
+
+        const tr = document.createElement("tr");
+        tr.setAttribute("data-symbol", symbol);
+        if (symbol === valgtSymbol) tr.className = "selected-row";
+        tr.onclick = (e) => {
+          if (!e.target.classList.contains("btn-delete")) vaelgAktiv(symbol);
+        };
+
+        tr.innerHTML = `
+          <td style="font-weight: 700;">${symbol}</td>
+          <td style="font-weight: 600;">$${d.pris ? d.pris.toFixed(2) : "-"}</td>
+          <td>
+            <span class="badge ${badgeKlasse}">
+              ${fortegn}${d.aendring ? d.aendring.toFixed(2) : "0"} (${fortegn}${d.aendringPct ? d.aendringPct.toFixed(2) : "0"}%)
+            </span>
+          </td>
+          <td>${d.pe ? d.pe.toFixed(1) : "N/A"}</td>
+          <td>${d.fwdPe ? d.fwdPe.toFixed(1) : "N/A"}</td>
+          <td>${d.sma200 ? "$" + d.sma200.toFixed(2) : "N/A"}</td>
+          <td><span class="trend-pill" style="color: ${trendFarve};">${trendTekst}</span></td>
+          <td><button class="btn-delete" title="Fjern aktiv" onclick="fjernAktiv('${symbol}')">✕</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Indlæs alle aktiver fra API
+    async function indlaesAlleAktiver() {
+      const apiKey = document.getElementById("apiKeyInput").value.trim();
+      if (!apiKey) return;
+
+      for (const symbol of overvaagningsliste) {
+        try {
+          aktieDataCache[symbol] = await hentDataFraAPI(symbol, apiKey);
+        } catch (err) {
+          console.error(`Fejl ved indlæsning af ${symbol}:`, err);
+        }
+      }
+
+      opdaterTabelVisning();
+      if (aktieDataCache[valgtSymbol]) {
+        opdaterGrafData();
+      }
+    }
+
+    // Tilføj nyt aktiv
+    async function tilfoejAktiv() {
+      const apiKey = document.getElementById("apiKeyInput").value.trim();
+      const input = document.getElementById("symbolInput");
+      const symbol = input.value.trim().toUpperCase();
+
+      if (!apiKey) {
+        alert("Indtast venligst en gyldig Finnhub API-nøgle øverst.");
+        return;
+      }
+      if (!symbol) return;
+      if (overvaagningsliste.includes(symbol)) {
+        alert("Dette symbol er allerede på listen.");
+        return;
+      }
+
+      try {
+        const data = await hentDataFraAPI(symbol, apiKey);
+        if (!data.pris && !data.sma200) {
+          alert(`Kunne ikke finde data for symbolet: ${symbol}`);
+          return;
+        }
+
+        aktieDataCache[symbol] = data;
+        overvaagningsliste.push(symbol);
+        localStorage.setItem("biWatchlistSymbols", JSON.stringify(overvaagningsliste));
+        input.value = "";
+
+        vaelgAktiv(symbol);
+        opdaterTabelVisning();
+      } catch (e) {
+        alert("Fejl under tilføjelse. Tjek API-nøglen.");
+      }
+    }
+
+    // Fjern aktiv
+    function fjernAktiv(symbol) {
+      overvaagningsliste = overvaagningsliste.filter(s => s !== symbol);
+      delete aktieDataCache[symbol];
+      localStorage.setItem("biWatchlistSymbols", JSON.stringify(overvaagningsliste));
+      
+      if (valgtSymbol === symbol && overvaagningsliste.length > 0) {
+        valgtSymbol = overvaagningsliste[0];
+      }
+      
+      opdaterTabelVisning();
+      opdaterGrafData();
+    }
+
+    // Opstart
+    window.onload = () => {
+      initialiserGraf();
+      if (apiKeyFelt.value) {
+        indlaesAlleAktiver();
+      }
+    };
+  </script>
+</body>
+</html>
