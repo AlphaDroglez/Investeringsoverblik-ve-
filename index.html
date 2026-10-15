@@ -400,30 +400,47 @@
 
     // Henter kursdata samt nøgletal (P/E, Forward P/E, 200 SMA) fra Finnhub
     async function hentDataFraAPI(symbol, apiKey) {
-      const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${apiKey}`;
-      const metricUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${apiKey}`;
+  const quoteUrl = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${apiKey}`;
+  const metricUrl = `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all&token=${apiKey}`;
 
-      const [quoteRes, metricRes] = await Promise.all([
-        fetch(quoteUrl),
-        fetch(metricUrl)
-      ]);
+  const [quoteRes, metricRes] = await Promise.all([
+    fetch(quoteUrl),
+    fetch(metricUrl)
+  ]);
 
-      if (!quoteRes.ok || !metricRes.ok) {
-        throw new Error("Fejl ved API-forbindelse");
-      }
+  if (!quoteRes.ok || !metricRes.ok) {
+    throw new Error(`Fejl ved hentning af data for ${symbol}`);
+  }
 
-      const qData = await quoteRes.json();
-      const mData = await metricRes.json();
+  const qData = await quoteRes.json();
+  const mData = await metricRes.json();
+  const metrics = mData.metric || {};
 
-      return {
-        pris: qData.c,
-        aendring: qData.d,
-        aendringPct: qData.dp,
-        pe: mData.metric?.peNormalizedAnnual || mData.metric?.peBasicExclExtraTTM || null,
-        fwdPe: mData.metric?.peNormalizedAnnual ? (mData.metric.peNormalizedAnnual * 0.92) : null, // Estimeret / Forward metrik
-        sma200: mData.metric?.["200DayAverage"] || null
-      };
-    }
+  // 1. Kurs og Dagsudsving (Reelle tal direkte fra børsen)
+  const pris = typeof qData.c === "number" && qData.c > 0 ? qData.c : null;
+  const aendring = typeof qData.d === "number" ? qData.d : null;
+  const aendringPct = typeof qData.dp === "number" ? qData.dp : null;
+
+  // 2. Trailing P/E (TTM): Kun officielle tal, ellers null
+  const pe = metrics.peTTM || metrics.peBasicExclExtraTTM || metrics.peNormalizedAnnual || null;
+
+  // 3. Forward P/E:
+  // Vi bruger KUN reelle konsensustal hvis de findes i API'et.
+  // Vi laver ALDRIG en kunstig udregning (* 0.92). Findes tallet ikke, sættes det til null.
+  const fwdPe = metrics.forwardPE || metrics.peExclExtraForward || null;
+
+  // 4. 200 SMA: Finnhubs officielle API-nøgle hedder "200DayMovingAverage"
+  const sma200 = metrics["200DayMovingAverage"] || null;
+
+  return {
+    pris,
+    aendring,
+    aendringPct,
+    pe,
+    fwdPe,
+    sma200
+  };
+}
 
     // Genererer historiske datapunkter tilpasset tidsrammen
     function opdaterGrafData() {
@@ -489,52 +506,58 @@
       opdaterGrafData();
     }
 
-    // Genopbyg tabellen med friske data
-    function opdaterTabelVisning() {
-      const tbody = document.getElementById("tabelBody");
-      tbody.innerHTML = "";
+    // Opdaterer tabellen med præcise værdier eller ærlig "N/A"
+function opdaterTabelVisning() {
+  const tbody = document.getElementById("tabelBody");
+  tbody.innerHTML = "";
 
-      overvaagningsliste.forEach(symbol => {
-        const d = aktieDataCache[symbol];
-        if (!d) return;
+  overvaagningsliste.forEach(symbol => {
+    const d = aktieDataCache[symbol];
+    if (!d) return;
 
-        const erPositiv = d.aendring >= 0;
-        const fortegn = erPositiv ? "+" : "";
-        const badgeKlasse = erPositiv ? "badge-pos" : "badge-neg";
-
-        // Vurder 200-dages glidende gennemsnit
-        let trendTekst = "N/A";
-        let trendFarve = "var(--text-muted)";
-        if (d.sma200 && d.pris) {
-          const erOver = d.pris >= d.sma200;
-          trendTekst = erOver ? "▲ Bullish" : "▼ Bearish";
-          trendFarve = erOver ? "var(--success)" : "var(--danger)";
-        }
-
-        const tr = document.createElement("tr");
-        tr.setAttribute("data-symbol", symbol);
-        if (symbol === valgtSymbol) tr.className = "selected-row";
-        tr.onclick = (e) => {
-          if (!e.target.classList.contains("btn-delete")) vaelgAktiv(symbol);
-        };
-
-        tr.innerHTML = `
-          <td style="font-weight: 700;">${symbol}</td>
-          <td style="font-weight: 600;">$${d.pris ? d.pris.toFixed(2) : "-"}</td>
-          <td>
-            <span class="badge ${badgeKlasse}">
-              ${fortegn}${d.aendring ? d.aendring.toFixed(2) : "0"} (${fortegn}${d.aendringPct ? d.aendringPct.toFixed(2) : "0"}%)
-            </span>
-          </td>
-          <td>${d.pe ? d.pe.toFixed(1) : "N/A"}</td>
-          <td>${d.fwdPe ? d.fwdPe.toFixed(1) : "N/A"}</td>
-          <td>${d.sma200 ? "$" + d.sma200.toFixed(2) : "N/A"}</td>
-          <td><span class="trend-pill" style="color: ${trendFarve};">${trendTekst}</span></td>
-          <td><button class="btn-delete" title="Fjern aktiv" onclick="fjernAktiv('${symbol}')">✕</button></td>
-        `;
-        tbody.appendChild(tr);
-      });
+    // Håndtering af kursudsving
+    let udsvingHtml = `<span style="color: var(--text-muted);">N/A</span>`;
+    if (d.aendring !== null && d.aendringPct !== null) {
+      const erPositiv = d.aendring >= 0;
+      const fortegn = erPositiv ? "+" : "";
+      const badgeKlasse = erPositiv ? "badge-pos" : "badge-neg";
+      udsvingHtml = `
+        <span class="badge ${badgeKlasse}">
+          ${fortegn}${d.aendring.toFixed(2)} (${fortegn}${d.aendringPct.toFixed(2)}%)
+        </span>
+      `;
     }
+
+    // Trend-vurdering: Kræver BÅDE aktuel kurs og 200 SMA
+    let trendTekst = "N/A";
+    let trendFarve = "var(--text-muted)";
+    if (d.sma200 !== null && d.pris !== null && d.sma200 > 0) {
+      const erOverSma = d.pris >= d.sma200;
+      trendTekst = erOverSma ? "▲ Bullish" : "▼ Bearish";
+      trendFarve = erOverSma ? "var(--success)" : "var(--danger)";
+    }
+
+    const tr = document.createElement("tr");
+    tr.setAttribute("data-symbol", symbol);
+    if (symbol === valgtSymbol) tr.className = "selected-row";
+    
+    tr.onclick = (e) => {
+      if (!e.target.classList.contains("btn-delete")) vaelgAktiv(symbol);
+    };
+
+    tr.innerHTML = `
+      <td style="font-weight: 700;">${symbol}</td>
+      <td style="font-weight: 600;">${d.pris !== null ? "$" + d.pris.toFixed(2) : "N/A"}</td>
+      <td>${udsvingHtml}</td>
+      <td>${d.pe !== null ? Number(d.pe).toFixed(2) : "N/A"}</td>
+      <td>${d.fwdPe !== null ? Number(d.fwdPe).toFixed(2) : "N/A"}</td>
+      <td>${d.sma200 !== null ? "$" + Number(d.sma200).toFixed(2) : "N/A"}</td>
+      <td><span style="color: ${trendFarve}; font-weight: 600;">${trendTekst}</span></td>
+      <td><button class="btn-delete" title="Fjern aktiv" onclick="fjernAktiv('${symbol}')">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
 
     // Indlæs alle aktiver fra API
     async function indlaesAlleAktiver() {
