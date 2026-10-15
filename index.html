@@ -283,6 +283,7 @@
         <input type="password" id="apiKeyInput" placeholder="Finnhub API Nøgle" style="width: 170px;" />
         <input type="text" id="symbolInput" placeholder="Ticker (f.eks. NVDA, SPY)" style="width: 180px;" />
         <button onclick="tilfoejAktiv()">Tilføj</button>
+        <button onclick="genindlaesAltFrisk()" style="background-color: #4b5563;">Opdater Data</button>
       </div>
     </header>
 
@@ -634,6 +635,37 @@ function opdaterTabelVisning() {
         indlaesAlleAktiver();
       }
     };
+    // Funktion der sletter gammel data-cache og tvinger friske API-kald igennem
+async function genindlaesAltFrisk() {
+  const apiKey = document.getElementById("apiKeyInput").value.trim();
+  if (!apiKey) {
+    alert("Indtast venligst din Finnhub API-nøgle først.");
+    return;
+  }
+
+  // Tømmer det midlertidige data-lager
+  aktieDataCache = {};
+
+  // Viser en kort status på skærmen
+  const tbody = document.getElementById("tabelBody");
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">Henter friske data fra børsen...</td></tr>`;
+
+  // Kalder API'et for alle symboler på listen
+  for (const symbol of overvaagningsliste) {
+    try {
+      const data = await hentDataFraAPI(symbol, apiKey);
+      aktieDataCache[symbol] = data;
+    } catch (fejl) {
+      console.error(`Fejl ved hentning af ${symbol}:`, fejl);
+    }
+  }
+
+  // Genopbygger tabellen og grafen med de nye tal
+  opdaterTabelVisning();
+  if (aktieDataCache[valgtSymbol]) {
+    opdaterGrafData();
+  }
+}
   </script>
 </body>
 </html>
